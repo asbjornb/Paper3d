@@ -54,14 +54,28 @@ test('crossing an enemy trail eliminates its owner', () => {
   assert.ok(h.alive, 'killer alive');
 });
 
-test('running into your own trail is fatal', () => {
+test('crossing your own trail is harmless and still captures', () => {
   const g = freshGame(); clearBoard(g); g.checkEnd = () => {};
   const h = g.human; place(g, h, 70, 70); h.baseSpeed = 8;
   h.angle = h.targetAngle = 0; run(g, 1.5); // out to the right
   h.targetAngle = Math.PI / 2; run(g, 0.5);
   h.targetAngle = Math.PI; run(g, 0.4);
   h.targetAngle = -Math.PI / 2; run(g, 1.2); // cut back across own trail
-  assert.equal(h.alive, false, 'human died on own trail');
+  assert.ok(h.alive, 'human survives crossing own trail');
+  const before = h.area;
+  for (let t = 0; t < 4 && h.trail.length; t += 1 / 60) {
+    h.targetAngle = Math.atan2(70.5 - h.z, 70.5 - h.x); g.update(1 / 60);
+  }
+  assert.equal(h.trail.length, 0, 'made it home');
+  assert.ok(h.area > before, 'loop captured');
+});
+
+test('running along the arena edge is faster', () => {
+  const g = freshGame(); clearBoard(g); g.checkEnd = () => {};
+  const h = g.human; place(g, h, 70, 70);
+  const mid = h.speedBonus;
+  h.x = 0.6;
+  assert.ok(h.speedBonus > mid + 0.25, `edge bonus ${mid} -> ${h.speedBonus}`);
 });
 
 test('players are safe from bumps inside their own territory', () => {
