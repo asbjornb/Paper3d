@@ -3,6 +3,7 @@ import {
   GRID, ROUND_TIME, WIN_SHARE, PLAYER_SPEED, TURN_RATE, START_RADIUS,
   BOT_RESPAWN, TICK, ANIMALS, BOT_NAMES, NUM_BOTS,
   AREA_SPEED_MAX, KILL_SPEED, KILL_SPEED_MAX, RUSH_SPEED, RUSH_KILL, BIG_GRAB, RUSH_MAX,
+  EDGE_ZONE, EDGE_SPEED,
 } from './config.js';
 import { BotBrain } from './bot.js';
 
@@ -50,7 +51,10 @@ export class Player {
     const area = AREA_SPEED_MAX * Math.sqrt(Math.min(1, this.share / WIN_SHARE));
     const kills = Math.min(KILL_SPEED_MAX, this.lifeKills * KILL_SPEED);
     const rush = this.rush > 0 ? RUSH_SPEED * Math.min(1, this.rush / 0.6) : 0; // eases out over the last 0.6s
-    return area + kills + rush;
+    // edge lane: full bonus hugging the wall, fading out over EDGE_ZONE cells
+    const wallD = Math.min(this.x, this.z, N - this.x, N - this.z);
+    const edge = EDGE_SPEED * Math.max(0, Math.min(1, (EDGE_ZONE - wallD) / (EDGE_ZONE - 1)));
+    return area + kills + rush + edge;
   }
   addRush(sec) { this.rush = Math.min(RUSH_MAX, Math.max(0, this.rush) + sec); }
 }
@@ -250,12 +254,8 @@ export class Game {
     if (t) {
       const victim = this.players[t - 1];
       if (victim === p) {
-        // Skimming along a cell boundary can re-enter a cell you just laid: forgive that.
-        const L = p.trail.length;
-        for (let k = Math.max(0, L - 4); k < L; k++) {
-          if (p.trail[k] === i) { p.cell = i; return; }
-        }
-        this.kill(p, null, 'self');
+        // crossing your own trail is harmless: just pass over it
+        p.cell = i;
         return;
       }
       this.kill(victim, p, 'cut');

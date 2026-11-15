@@ -16,10 +16,10 @@ npm run preview  # serve the production build
 
 - **Move**: your animal never stops. Steer with the mouse, WASD / arrow keys, or drag on touch screens.
 - **Claim**: leaving your territory draws a glowing trail. Return to your land to fill the enclosed loop.
-- **Cut**: crossing a rival's exposed trail eliminates them. Touching your own trail eliminates you.
+- **Cut**: crossing a rival's exposed trail eliminates them. Crossing your own trail is harmless.
 - **Safe zone**: inside your own territory you cannot be cut, and head-on bumps knock out the intruder.
 - **Speed**: the more land you hold, the faster you run. Each kill gives a short ⚡ speed rush plus a
-  small lasting boost (until you die), and claiming a big area in one loop also triggers a rush.
+  small lasting boost (until you die), and claiming a big area in one loop also triggers a rush. Running along the arena's edge is faster too.
 - **Win**: hold 25% of the arena, or have the most land when the 2:30 timer ends.
 - **Lose**: get eliminated, or end the round behind another animal.
 

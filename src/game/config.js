@@ -1,15 +1,17 @@
 export const GRID = 140; // cells per side
 export const ROUND_TIME = 150; // seconds
 export const WIN_SHARE = 0.25; // instant victory at 25% of the arena
-export const PLAYER_SPEED = 9.4; // base cells per second
+export const PLAYER_SPEED = 10.8; // base cells per second
 // speed bonuses (fractions of base speed, added together)
-export const AREA_SPEED_MAX = 0.3; // bonus at WIN_SHARE land; scales with sqrt(share) so early land matters
-export const KILL_SPEED = 0.04; // permanent bonus per kill this life...
-export const KILL_SPEED_MAX = 0.2; // ...capped
+export const AREA_SPEED_MAX = 0.6; // bonus at WIN_SHARE land; scales with sqrt(share) so early land matters
+export const KILL_SPEED = 0.08; // permanent bonus per kill this life...
+export const KILL_SPEED_MAX = 0.4; // ...capped
 export const RUSH_SPEED = 0.4; // temporary surge while a rush is active
 export const RUSH_KILL = 3; // seconds of rush per kill
 export const BIG_GRAB = 150; // cells captured in one go that count as a big grab
 export const RUSH_MAX = 7; // rush time cap (seconds)
+export const EDGE_ZONE = 4; // cells from the arena wall that count as the edge lane
+export const EDGE_SPEED = 0.3; // bonus while running in the edge lane
 export const TURN_RATE = 6.5; // radians per second
 export const START_RADIUS = 3.2; // starting territory radius (cells)
 export const BOT_RESPAWN = 3.5; // seconds
