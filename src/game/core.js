@@ -2,6 +2,7 @@
 import {
   GRID, ROUND_TIME, WIN_SHARE, PLAYER_SPEED, TURN_RATE, START_RADIUS,
   BOT_RESPAWN, TICK, ANIMALS, BOT_NAMES, NUM_BOTS,
+  AREA_SPEED_MAX, KILL_SPEED, KILL_SPEED_MAX, RUSH_SPEED, RUSH_KILL, BIG_GRAB, RUSH_MAX,
 } from './config.js';
 import { BotBrain } from './bot.js';
 
@@ -26,7 +27,10 @@ export class Player {
     this.alive = false;
     this.x = 0; this.z = 0;
     this.angle = 0; this.targetAngle = 0;
+    this.baseSpeed = PLAYER_SPEED;
     this.speed = PLAYER_SPEED;
+    this.lifeKills = 0; // kills since last spawn (feeds the permanent kill bonus)
+    this.rush = 0; // seconds of speed surge left
     this.cell = -1;
     this.trail = []; // cell indices
     this.path = []; // smooth points {x,z} for trail ribbon
@@ -41,6 +45,14 @@ export class Player {
     this.spawnTime = 0;
   }
   get share() { return this.area / TOTAL; }
+  // total speed bonus as a fraction of base speed
+  get speedBonus() {
+    const area = AREA_SPEED_MAX * Math.sqrt(Math.min(1, this.share / WIN_SHARE));
+    const kills = Math.min(KILL_SPEED_MAX, this.lifeKills * KILL_SPEED);
+    const rush = this.rush > 0 ? RUSH_SPEED * Math.min(1, this.rush / 0.6) : 0; // eases out over the last 0.6s
+    return area + kills + rush;
+  }
+  addRush(sec) { this.rush = Math.min(RUSH_MAX, Math.max(0, this.rush) + sec); }
 }
 
 export class Game {
@@ -70,7 +82,7 @@ export class Game {
     for (let i = 0; i < numBots; i++) {
       const p = new Player(i + 1, others[i % others.length], names[i], true);
       p.brain = new BotBrain(this, p, i);
-      p.speed = PLAYER_SPEED * 0.95; // a small edge for the human
+      p.baseSpeed = PLAYER_SPEED * 0.95; // a small edge for the human
       this.players.push(p);
     }
     for (const p of this.players) this.spawn(p);
@@ -112,6 +124,7 @@ export class Game {
     p.targetAngle = p.angle;
     p.trail = []; p.path = [];
     p.area = 0;
+    p.lifeKills = 0; p.rush = 0;
     p.spawnTime = this.time;
     p.minX = N; p.maxX = 0; p.minZ = N; p.maxZ = 0;
     const r = START_RADIUS;
@@ -179,6 +192,8 @@ export class Game {
         continue;
       }
       p.aliveTime += dt;
+      if (p.rush > 0) p.rush = Math.max(0, p.rush - dt);
+      p.speed = p.baseSpeed * (1 + p.speedBonus);
       if (p.brain) p.brain.think(dt);
       this.movePlayer(p, dt);
     }
@@ -189,7 +204,8 @@ export class Game {
 
   movePlayer(p, dt) {
     const d = angleDiff(p.angle, p.targetAngle);
-    const maxTurn = TURN_RATE * dt;
+    // turn faster when moving faster so the turning circle stays the same size
+    const maxTurn = TURN_RATE * Math.max(1, p.speed / PLAYER_SPEED) * dt;
     p.angle += Math.max(-maxTurn, Math.min(maxTurn, d));
     let nx = p.x + Math.cos(p.angle) * p.speed * dt;
     let nz = p.z + Math.sin(p.angle) * p.speed * dt;
@@ -314,7 +330,10 @@ export class Game {
     }
     for (const w of wiped) this.checkWipe(w, p);
     if (captured.length) {
-      this.events.push({ type: 'capture', player: p, cells: captured, amount: captured.length });
+      // big grab: a speed rush that grows with the size of the haul
+      const big = captured.length >= BIG_GRAB;
+      if (big) p.addRush(1.5 + Math.min(3.5, (captured.length - BIG_GRAB) / 150));
+      this.events.push({ type: 'capture', player: p, cells: captured, amount: captured.length, big });
     }
   }
 
@@ -336,7 +355,10 @@ export class Game {
     }
     victim.area = 0;
     victim.trail = []; victim.path = [];
-    if (killer && killer !== victim) killer.kills++;
+    if (killer && killer !== victim) {
+      killer.kills++;
+      if (killer.alive) { killer.lifeKills++; killer.addRush(RUSH_KILL); }
+    }
     this.dirtyCells = true;
     this.events.push({ type: 'death', victim, killer, reason, x: victim.x, z: victim.z, cells: lostCells });
   }

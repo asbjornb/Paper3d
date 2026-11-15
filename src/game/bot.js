@@ -1,5 +1,5 @@
 // Bot brain: plans loops out of its territory, retreats under threat, hunts exposed trails.
-import { GRID, TURN_RATE } from './config.js';
+import { GRID, TURN_RATE, PLAYER_SPEED } from './config.js';
 
 const N = GRID;
 const PERSONAS = [
@@ -340,11 +340,12 @@ export class BotBrain {
     const recent = this._recent;
     let x = p.x; let z = p.z; let ang = p.angle;
     const dt = 0.04;
+    const turn = TURN_RATE * Math.max(1, p.speed / PLAYER_SPEED);
     for (let t = dt; t < horizon; t += dt) {
       let d = a - ang;
       while (d > Math.PI) d -= Math.PI * 2;
       while (d < -Math.PI) d += Math.PI * 2;
-      const mt = TURN_RATE * dt;
+      const mt = turn * dt;
       ang += Math.max(-mt, Math.min(mt, d));
       x += Math.cos(ang) * p.speed * dt; z += Math.sin(ang) * p.speed * dt;
       if (x < 0.8 || z < 0.8 || x > N - 0.8 || z > N - 0.8) return t;

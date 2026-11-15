@@ -357,6 +357,9 @@ function updateHud(force) {
   $('share-arc').style.stroke = h.color;
   $('share-arc').style.color = h.color;
   $('kills-text').textContent = h.kills;
+  const spd = Math.round(h.speedBonus * 100);
+  $('speed-text').textContent = `+${spd}%`;
+  $('speed-text').parentElement.classList.toggle('rush', h.alive && h.rush > 0);
   $('rank-text').textContent = '#' + (g.ranking().indexOf(h) + 1);
   const now = performance.now();
   if (force || now - world.lbTimer > 250) { updateLeaderboard(); world.lbTimer = now; }
@@ -386,6 +389,7 @@ function screenOf(x, y, z) {
   return { x: (tmpV.x * 0.5 + 0.5) * window.innerWidth, y: (-tmpV.y * 0.5 + 0.5) * window.innerHeight, vis: tmpV.z < 1 };
 }
 
+const rushCol = new THREE.Color();
 const pName = (p) => `<b style="color:${p.color}">${EMOJI[p.animal]} ${escapeHtml(p.name)}</b>`;
 
 // ---------------------------------------------------------------- events -> effects
@@ -410,6 +414,11 @@ function handleEvents() {
         const s = screenOf(p.x, 2.5, p.z);
         const pct = (e.cells.length / (GRID * GRID)) * 100;
         popup(`+${pct.toFixed(pct < 1 ? 2 : 1)}%`, p.color, s.x, s.y - 30, e.cells.length > 300);
+        if (e.big) {
+          const label = e.cells.length >= 600 ? 'MEGA GRAB!' : e.cells.length >= 300 ? 'HUGE GRAB!' : 'BIG GRAB!';
+          popup(label, '#7af0ff', window.innerWidth / 2, window.innerHeight * 0.24, true);
+          popup('⚡ SPEED RUSH', '#7af0ff', s.x, s.y + 10);
+        }
         if (e.cells.length > 400) world.shake = Math.max(world.shake, 0.35);
       }
     } else if (e.type === 'death') {
@@ -445,6 +454,7 @@ function handleEvents() {
         const label = world.multi >= 3 ? 'RAMPAGE!' : world.multi === 2 ? 'DOUBLE CUT!' : e.reason === 'wiped' ? 'WIPED OUT!' : e.reason === 'bump' ? 'BONK!' : 'TRAIL CUT!';
         popup(label, '#ffe27a', window.innerWidth / 2, window.innerHeight * 0.32, true);
         popup(`${EMOJI[v.animal]} ${v.name}`, v.color, s.x, s.y - 20);
+        popup('⚡ SPEED RUSH', '#7af0ff', s.x, s.y + 14);
       } else if (near) {
         sfx.enemyDeath();
       }
@@ -622,6 +632,13 @@ function frame(now) {
     a.root.scale.setScalar(ANIMAL_SCALE * Math.max(0.05, sp));
     const moving = mode !== 'countdown' && mode !== 'paused';
     if (mode !== 'paused') a.update(dt, moving, p.angle);
+    // speed rush: streak of sparks behind the runner
+    if (moving && p.rush > 0 && Math.random() < dt * 40 && Math.hypot(p.x - world.camTarget.x, p.z - world.camTarget.z) < 45) {
+      const bx = p.x - Math.cos(p.angle) * 0.8; const bz = p.z - Math.sin(p.angle) * 0.8;
+      particles.emit(bx + (Math.random() - 0.5) * 0.6, 0.4 + Math.random() * 0.5, bz + (Math.random() - 0.5) * 0.6,
+        -Math.cos(p.angle) * 2, 0.8 + Math.random(), -Math.sin(p.angle) * 2,
+        Math.random() < 0.5 ? new THREE.Color('#ffffff') : rushCol.set(p.color), 0.3 + Math.random() * 0.25, 0.45, 1, 0);
+    }
   }
 
   world.territory.update(elapsed);
