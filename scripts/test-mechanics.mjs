@@ -5,7 +5,7 @@ import { Game } from '../src/game/core.js';
 function freshGame() {
   const g = new Game({ playerAnimal: 'fox' });
   // park every bot far away, frozen, so scenarios are deterministic
-  for (const p of g.players) { if (p.isBot) { p.brain = { think() {}, reset() {} }; p.speed = 0; } }
+  for (const p of g.players) { if (p.isBot) { p.brain = { think() {}, reset() {} }; p.baseSpeed = 0; } }
   return g;
 }
 function run(g, sec) { for (let t = 0; t < sec; t += 1 / 60) g.update(1 / 60); }
@@ -25,7 +25,7 @@ function test(name, fn) { fn(); passed++; console.log('✓', name); }
 
 test('loop outside territory captures the enclosed area', () => {
   const g = freshGame(); clearBoard(g); g.checkEnd = () => {};
-  const h = g.human; place(g, h, 40, 40); h.speed = 8;
+  const h = g.human; place(g, h, 40, 40); h.baseSpeed = 8;
   const before = h.area;
   const legs = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
   for (const a of legs) { h.angle = h.targetAngle = a; run(g, 1.3); }
@@ -46,7 +46,7 @@ test('crossing an enemy trail eliminates its owner', () => {
   place(g, h, 30, 60); place(g, b, 60, 30);
   // give the bot an exposed trail across x=30..50 at z=45
   for (let x = 30; x <= 50; x++) { const i = 45 * g.N + x; g.trailGrid[i] = b.code; b.trail.push(i); }
-  h.speed = 8; h.angle = h.targetAngle = -Math.PI / 2; // move up (towards smaller z)
+  h.baseSpeed = 8; h.angle = h.targetAngle = -Math.PI / 2; // move up (towards smaller z)
   run(g, 2.5);
   assert.equal(b.alive, false, 'bot eliminated');
   assert.equal(h.kills, 1, 'kill credited');
@@ -56,7 +56,7 @@ test('crossing an enemy trail eliminates its owner', () => {
 
 test('running into your own trail is fatal', () => {
   const g = freshGame(); clearBoard(g); g.checkEnd = () => {};
-  const h = g.human; place(g, h, 70, 70); h.speed = 8;
+  const h = g.human; place(g, h, 70, 70); h.baseSpeed = 8;
   h.angle = h.targetAngle = 0; run(g, 1.5); // out to the right
   h.targetAngle = Math.PI / 2; run(g, 0.5);
   h.targetAngle = Math.PI; run(g, 0.4);
@@ -97,6 +97,47 @@ test('area bookkeeping matches the grid after random play', () => {
   const counts = new Array(10).fill(0);
   for (const o of g.owner) counts[o]++;
   for (const p of g.players) assert.equal(counts[p.code], p.area, `${p.name} area`);
+});
+
+test('more land means more speed', () => {
+  const g = freshGame(); clearBoard(g); g.checkEnd = () => {};
+  const h = g.human; place(g, h, 40, 40, 2);
+  const small = h.speedBonus;
+  place(g, h, 70, 70, 20);
+  assert.ok(h.speedBonus > small + 0.1, `bonus ${small} -> ${h.speedBonus}`);
+  run(g, 0.05);
+  assert.ok(h.speed > h.baseSpeed * 1.1, 'speed applied');
+});
+
+test('kills grant a rush and a lasting speed bonus', () => {
+  const g = freshGame(); clearBoard(g); g.checkEnd = () => {};
+  const h = g.human; const b = g.players[1];
+  place(g, h, 30, 30); place(g, b, 90, 90);
+  const before = h.speedBonus;
+  g.kill(b, h, 'cut');
+  assert.ok(h.rush > 0, 'rush started');
+  assert.ok(h.speedBonus > before + 0.3, 'big temporary boost');
+  run(g, 8);
+  assert.equal(h.rush, 0, 'rush expired');
+  assert.ok(h.speedBonus > before, 'lasting kill bonus remains');
+});
+
+test('a big single capture triggers a rush, a small one does not', () => {
+  const g = freshGame(); clearBoard(g); g.checkEnd = () => {};
+  const h = g.human; place(g, h, 60, 60, 2);
+  // small loop
+  for (let x = 63; x <= 64; x++) { const i = 58 * g.N + x; g.trailGrid[i] = h.code; h.trail.push(i); }
+  g.capture(h);
+  assert.equal(h.rush, 0, 'no rush for small grab');
+  // large loop: a 16x16 ring of trail around open ground next to home
+  const x0 = 63, z0 = 55, s = 16;
+  for (let x = x0; x < x0 + s; x++) for (const z of [z0, z0 + s - 1]) { const i = z * g.N + x; if (!g.trailGrid[i]) { g.trailGrid[i] = h.code; h.trail.push(i); } }
+  for (let z = z0; z < z0 + s; z++) for (const x of [x0, x0 + s - 1]) { const i = z * g.N + x; if (!g.trailGrid[i]) { g.trailGrid[i] = h.code; h.trail.push(i); } }
+  g.drainEvents();
+  g.capture(h);
+  const ev = g.drainEvents().find((e) => e.type === 'capture');
+  assert.ok(ev.big && ev.amount >= 150, `big grab of ${ev.amount}`);
+  assert.ok(h.rush > 1, 'rush started');
 });
 
 console.log(`\n${passed} tests passed`);
