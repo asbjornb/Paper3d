@@ -455,6 +455,10 @@ function handleEvents() {
         popup(label, '#ffe27a', window.innerWidth / 2, window.innerHeight * 0.32, true);
         popup(`${EMOJI[v.animal]} ${v.name}`, v.color, s.x, s.y - 20);
         popup('⚡ SPEED RUSH', '#7af0ff', s.x, s.y + 14);
+        if (e.inherited) {
+          const pct = (e.inherited / (GRID * GRID)) * 100;
+          popup(`+${pct.toFixed(pct < 1 ? 2 : 1)}% land`, h.color, s.x, s.y - 50, e.inherited > 300);
+        }
       } else if (near) {
         sfx.enemyDeath();
       }

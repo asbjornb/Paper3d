@@ -3,7 +3,7 @@ import {
   GRID, ROUND_TIME, WIN_SHARE, PLAYER_SPEED, TURN_RATE, START_RADIUS,
   BOT_RESPAWN, TICK, ANIMALS, BOT_NAMES, NUM_BOTS,
   AREA_SPEED_MAX, KILL_SPEED, KILL_SPEED_MAX, RUSH_SPEED, RUSH_KILL, BIG_GRAB, RUSH_MAX,
-  EDGE_ZONE, EDGE_SPEED,
+  EDGE_ZONE, EDGE_SPEED, EDGE_RAMP_SPEED, EDGE_RAMP_TIME, EDGE_RAMP_DECAY,
 } from './config.js';
 import { BotBrain } from './bot.js';
 
@@ -32,6 +32,7 @@ export class Player {
     this.speed = PLAYER_SPEED;
     this.lifeKills = 0; // kills since last spawn (feeds the permanent kill bonus)
     this.rush = 0; // seconds of speed surge left
+    this.edgeRamp = 0; // 0..1, builds while running along the arena wall
     this.cell = -1;
     this.trail = []; // cell indices
     this.path = []; // smooth points {x,z} for trail ribbon
@@ -51,10 +52,19 @@ export class Player {
     const area = AREA_SPEED_MAX * Math.sqrt(Math.min(1, this.share / WIN_SHARE));
     const kills = Math.min(KILL_SPEED_MAX, this.lifeKills * KILL_SPEED);
     const rush = this.rush > 0 ? RUSH_SPEED * Math.min(1, this.rush / 0.6) : 0; // eases out over the last 0.6s
-    // edge lane: full bonus hugging the wall, fading out over EDGE_ZONE cells
-    const wallD = Math.min(this.x, this.z, N - this.x, N - this.z);
-    const edge = EDGE_SPEED * Math.max(0, Math.min(1, (EDGE_ZONE - wallD) / (EDGE_ZONE - 1)));
+    // edge lane: instant bonus hugging the wall (fading out over EDGE_ZONE cells),
+    // plus a boost that keeps building the longer you stay on the edge
+    const edge = EDGE_SPEED * this.edgeProximity + EDGE_RAMP_SPEED * this.edgeRamp * this.edgeRamp;
     return area + kills + rush + edge;
+  }
+  // 1 hugging the arena wall, fading to 0 at EDGE_ZONE cells in
+  get edgeProximity() {
+    const wallD = Math.min(this.x, this.z, N - this.x, N - this.z);
+    return Math.max(0, Math.min(1, (EDGE_ZONE - wallD) / (EDGE_ZONE - 1)));
+  }
+  updateEdge(dt) {
+    if (this.edgeProximity > 0) this.edgeRamp = Math.min(1, this.edgeRamp + dt / EDGE_RAMP_TIME);
+    else this.edgeRamp = Math.max(0, this.edgeRamp - dt / EDGE_RAMP_DECAY);
   }
   addRush(sec) { this.rush = Math.min(RUSH_MAX, Math.max(0, this.rush) + sec); }
 }
@@ -96,7 +106,7 @@ export class Game {
 
   // ---------- spawning ----------
   findSpawn() {
-    let best = null; let bestScore = -1;
+    let best = null; let bestScore = -Infinity; // crowded board: fall back to the least occupied spot
     const r = Math.ceil(START_RADIUS) + 2;
     for (let tries = 0; tries < 60; tries++) {
       const x = r + 2 + Math.random() * (N - 2 * r - 4);
@@ -128,7 +138,7 @@ export class Game {
     p.targetAngle = p.angle;
     p.trail = []; p.path = [];
     p.area = 0;
-    p.lifeKills = 0; p.rush = 0;
+    p.lifeKills = 0; p.rush = 0; p.edgeRamp = 0;
     p.spawnTime = this.time;
     p.minX = N; p.maxX = 0; p.minZ = N; p.maxZ = 0;
     const r = START_RADIUS;
@@ -197,6 +207,7 @@ export class Game {
       }
       p.aliveTime += dt;
       if (p.rush > 0) p.rush = Math.max(0, p.rush - dt);
+      p.updateEdge(dt);
       p.speed = p.baseSpeed * (1 + p.speedBonus);
       if (p.brain) p.brain.think(dt);
       this.movePlayer(p, dt);
@@ -350,8 +361,13 @@ export class Game {
     for (const i of victim.trail) if (this.trailGrid[i] === victim.code) this.trailGrid[i] = 0;
     const lostCells = [];
     const code = victim.code;
+    // the killer inherits the victim's land; with no (living) killer it turns neutral
+    const heir = killer && killer !== victim && killer.alive ? killer : null;
     for (let i = 0; i < TOTAL; i++) {
-      if (this.owner[i] === code) { this.owner[i] = 0; this.prevOwner[i] = code; this.capTime[i] = this.time; lostCells.push(i); }
+      if (this.owner[i] !== code) continue;
+      if (heir) this.setOwner(i, heir, true);
+      else { this.owner[i] = 0; this.prevOwner[i] = code; this.capTime[i] = this.time; }
+      lostCells.push(i);
     }
     victim.area = 0;
     victim.trail = []; victim.path = [];
@@ -360,7 +376,7 @@ export class Game {
       if (killer.alive) { killer.lifeKills++; killer.addRush(RUSH_KILL); }
     }
     this.dirtyCells = true;
-    this.events.push({ type: 'death', victim, killer, reason, x: victim.x, z: victim.z, cells: lostCells });
+    this.events.push({ type: 'death', victim, killer, reason, x: victim.x, z: victim.z, cells: lostCells, inherited: heir ? lostCells.length : 0 });
   }
 
   checkHeadCollisions() {

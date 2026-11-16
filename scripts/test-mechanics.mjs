@@ -75,7 +75,29 @@ test('running along the arena edge is faster', () => {
   const h = g.human; place(g, h, 70, 70);
   const mid = h.speedBonus;
   h.x = 0.6;
-  assert.ok(h.speedBonus > mid + 0.25, `edge bonus ${mid} -> ${h.speedBonus}`);
+  const instant = h.speedBonus;
+  assert.ok(instant > mid + 0.15, `edge bonus ${mid} -> ${instant}`);
+  for (let t = 0; t < 2; t += 1 / 60) h.updateEdge(1 / 60);
+  const twoSec = h.speedBonus;
+  for (let t = 0; t < 2; t += 1 / 60) h.updateEdge(1 / 60);
+  const fourSec = h.speedBonus;
+  assert.ok(twoSec > instant + 0.1 && fourSec > twoSec + 0.3, `edge ramps up ${instant} -> ${twoSec} -> ${fourSec}`);
+  h.x = 70.5;
+  for (let t = 0; t < 1.5; t += 1 / 60) h.updateEdge(1 / 60);
+  assert.equal(h.edgeRamp, 0, 'edge boost fades after leaving the lane');
+});
+
+test('killing a rival hands you their land', () => {
+  const g = freshGame(); clearBoard(g); g.checkEnd = () => {};
+  const h = g.human; const b = g.players[1];
+  place(g, h, 30, 30); place(g, b, 90, 90, 5);
+  const hBefore = h.area; const bLand = b.area;
+  g.kill(b, h, 'cut');
+  assert.equal(b.area, 0, 'victim has no land');
+  assert.equal(h.area, hBefore + bLand, 'killer inherits it all');
+  assert.equal(g.owner[90 * g.N + 90], h.code, 'victim home now belongs to killer');
+  const ev = g.drainEvents().find((e) => e.type === 'death');
+  assert.equal(ev.inherited, bLand);
 });
 
 test('players are safe from bumps inside their own territory', () => {
